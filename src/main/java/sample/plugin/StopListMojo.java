@@ -1,7 +1,5 @@
 package sample.plugin;
 
-import lombok.Getter;
-import lombok.Setter;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 
@@ -11,33 +9,33 @@ import org.apache.maven.plugins.annotations.Parameter;
 
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Scanner;
 
-/**
- * Goal which touches a timestamp file.
- */
+
 @Mojo(name = "check", defaultPhase = LifecyclePhase.PROCESS_SOURCES)
 public class StopListMojo extends AbstractMojo {
 
-    @Parameter(property = "check.exclude")
-    @Getter
-    private String[] exclude = {};
+    @Parameter(property = "check.excludes")
+    private List<String> excludes = new ArrayList<>();
 
-    @Parameter(property = "check.test")
-    @Getter
-    private String test;
+    private List<String> excludeCanonical = new ArrayList<>();
 
-    @Getter
     @Parameter
-    private List<StopListWordParam> stopWords = new ArrayList<>();
+    private List<String> stopWords = new ArrayList<>();
 
+    @Parameter(defaultValue = "WARN")
+    String errorLevel;
+
+    @Parameter(defaultValue = "false")
+    private boolean ignoreCase;
 
     private boolean hasErrors = false;
 
     public void execute() throws MojoExecutionException {
+        init();
         checkInDirectory(new File("."));
 
         if (hasErrors) {
@@ -45,9 +43,32 @@ public class StopListMojo extends AbstractMojo {
         }
     }
 
-    private void checkInDirectory(File directory) {
-        File[] files = directory.listFiles();
+    private void init() {
+        initCanonicalPaths();
+    }
 
+    private void initCanonicalPaths() {
+        for (String excludePath : excludes) {
+            File file = new File(excludePath);
+            if (!file.exists()) {
+                continue;
+            }
+
+            try {
+                excludeCanonical.add(file.getCanonicalPath());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private void checkInDirectory(File directory) {
+        if (!directory.canRead()) {
+            handleNoAccess(directory);
+            return;
+        }
+
+        File[] files = directory.listFiles();
         if (files == null) {
             return;
         }
@@ -65,6 +86,11 @@ public class StopListMojo extends AbstractMojo {
     }
 
     private void checkFile(File file) {
+        if (!file.canRead()) {
+            handleNoAccess(file);
+            return;
+        }
+
         checkFileName(file);
 
         if (!file.isDirectory()) {
@@ -73,14 +99,19 @@ public class StopListMojo extends AbstractMojo {
     }
 
     private void checkFileName(File file) {
-        for (StopListWordParam stopListWordParam : stopWords) {
-            String searchingWord = stopListWordParam.getStopWord();
+        String fileName = file.getName();
+        if (ignoreCase) {
+            fileName = fileName.toLowerCase();
+        }
 
-            if (file.getName().contains(searchingWord)) {
+        for (String stopWord : stopWords) {
+            if (ignoreCase) {
+                stopWord = stopWord.toLowerCase();
+            }
+            if (fileName.contains(stopWord)) {
                 String entityType = file.isDirectory() ? "Directory" : "File";
-                handleError(
-                        stopListWordParam,
-                        String.format("%s name contains stop-word '%s', path: %s", entityType, searchingWord, file.getPath())
+                handleStopWordDetected(
+                        String.format("%s name contains stop-word '%s', path: %s", entityType, stopWord, file.getPath())
                 );
             }
         }
@@ -95,14 +126,17 @@ public class StopListMojo extends AbstractMojo {
                 String line = scanner.nextLine();
                 lineNum++;
 
-                line = line.toLowerCase();
-                for (StopListWordParam stopListWordParam : stopWords) {
-                    String searchingWord = stopListWordParam.getStopWord();
+                if (ignoreCase) {
+                    line = line.toLowerCase();
+                }
 
-                    if (line.contains(searchingWord.toLowerCase())) {
-                        handleError(
-                                stopListWordParam,
-                                String.format("File contains stop-word '%s', path: %s, line %s", searchingWord, file.getPath(), lineNum)
+                for (String stopWord : stopWords) {
+                    if (ignoreCase) {
+                        stopWord = stopWord.toLowerCase();
+                    }
+                    if (line.contains(stopWord)) {
+                        handleStopWordDetected(
+                                String.format("File contains stop-word '%s', path: %s, line %s", stopWord, file.getPath(), lineNum)
                         );
                     }
                 }
@@ -113,18 +147,25 @@ public class StopListMojo extends AbstractMojo {
     }
 
     private boolean isFileExcluded(File file) {
-        List<String> excludeFolders = Arrays.asList(exclude);
-        String filePath = file.getPath() + File.pathSeparator + file.getName();
-
-        return excludeFolders.contains(file.getPath()) || excludeFolders.contains(filePath);
+        try {
+            String canonicalFilePath = file.getCanonicalPath();
+            return excludeCanonical.contains(canonicalFilePath);
+        } catch (IOException e) {
+            e.printStackTrace();
+            return false;
+        }
     }
 
-    private void handleError(StopListWordParam wordParam, String errorMsg) {
-        if (wordParam.getLevel().equals(StopListWordParam.ErrorLevel.WARN)) {
+    private void handleStopWordDetected(String errorMsg) {
+        if (errorLevel.equals("WARN")) {
             getLog().warn(errorMsg);
-        } else {
+        } else if (errorLevel.equals("ERROR")) {
             getLog().error(errorMsg);
             hasErrors = true;
         }
+    }
+
+    private void handleNoAccess(File file) {
+        getLog().warn("No access to read " + file.getAbsolutePath());
     }
 }
