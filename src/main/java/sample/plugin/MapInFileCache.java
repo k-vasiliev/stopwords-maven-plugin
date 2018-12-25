@@ -87,20 +87,27 @@ public class MapInFileCache implements StopListCache {
     @Override
     public void beforeClose() {
         // write cache to file
+
+        File cacheFile = new File(FILE_CACHE_PATH);
+        File parent = cacheFile.getParentFile();
+
+        if (!parent.exists()) {
+            parent.mkdirs();
+        }
+
         try {
-            File cacheFile = new File(FILE_CACHE_PATH);
-            File parent = cacheFile.getParentFile();
-
-            if (!parent.exists()) {
-                parent.mkdirs();
-            }
-
             cacheFile.createNewFile();
-            FileOutputStream outputStream = new FileOutputStream(cacheFile);
-            ObjectOutputStream objectOutputStream = new ObjectOutputStream(outputStream);
+        } catch (IOException e) {
+            logger.info("Unable create cache file: " + FILE_CACHE_PATH);
+            logger.debug(e);
+        }
+
+        try (
+                FileOutputStream outputStream = new FileOutputStream(cacheFile);
+                ObjectOutputStream objectOutputStream = new ObjectOutputStream(outputStream);
+        ) {
             objectOutputStream.flush();
             objectOutputStream.writeObject(lastModifiedCache);
-            objectOutputStream.close();
         } catch (IOException e) {
             logger.info("Unable create cache file: " + FILE_CACHE_PATH);
             logger.debug(e);

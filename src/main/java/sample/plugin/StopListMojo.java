@@ -35,7 +35,7 @@ public class StopListMojo extends AbstractMojo {
     /**
      * List of stop-words to search for
      */
-    @Parameter
+    @Parameter(property = "stopWords", required = true)
     private List<String> stopWords = new ArrayList<>();
 
     /**
@@ -45,7 +45,7 @@ public class StopListMojo extends AbstractMojo {
      * On "WARN" plugin is just log if stop-words was found
      * On "ERROR" plugin is breaking the build
      */
-    @Parameter(defaultValue = "WARN")
+    @Parameter(defaultValue = "WARN", property = "errorLevel")
     String errorLevel;
 
     /**
