@@ -24,7 +24,7 @@ public class StopListMojo extends AbstractMojo {
     /**
      * List of files/folders where search will be excluded
      */
-    @Parameter(property = "check.excludes")
+    @Parameter(property = "excludes")
     private List<String> excludes = new ArrayList<>();
 
     /**

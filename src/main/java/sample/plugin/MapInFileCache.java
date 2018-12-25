@@ -104,7 +104,7 @@ public class MapInFileCache implements StopListCache {
 
         try (
                 FileOutputStream outputStream = new FileOutputStream(cacheFile);
-                ObjectOutputStream objectOutputStream = new ObjectOutputStream(outputStream);
+                ObjectOutputStream objectOutputStream = new ObjectOutputStream(outputStream)
         ) {
             objectOutputStream.flush();
             objectOutputStream.writeObject(lastModifiedCache);
