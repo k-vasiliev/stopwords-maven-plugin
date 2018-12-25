@@ -7,6 +7,7 @@ import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 
+import javax.inject.Inject;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -14,39 +15,83 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 
-
-@Mojo(name = "check", defaultPhase = LifecyclePhase.PROCESS_SOURCES)
+/**
+ * Plugin for search and react on stop-words in project
+ */
+@Mojo(name = "check", defaultPhase = LifecyclePhase.COMPILE)
 public class StopListMojo extends AbstractMojo {
 
+    /**
+     * List of files/folders where search will be excluded
+     */
     @Parameter(property = "check.excludes")
     private List<String> excludes = new ArrayList<>();
 
+    /**
+     * List of cached canonical paths of excludes param
+     */
     private List<String> excludeCanonical = new ArrayList<>();
 
+    /**
+     * List of stop-words to search for
+     */
     @Parameter
     private List<String> stopWords = new ArrayList<>();
 
+    /**
+     * Error level of plugin.
+     * Acceptable values is "WARN" and "ERROR"
+     * <p>
+     * On "WARN" plugin is just log if stop-words was found
+     * On "ERROR" plugin is breaking the build
+     */
     @Parameter(defaultValue = "WARN")
     String errorLevel;
 
+    /**
+     * Should or not case of stop words will be ignored
+     */
     @Parameter(defaultValue = "false")
     private boolean ignoreCase;
 
+    /**
+     * If errors was found build will be breaking
+     */
     private boolean hasErrors = false;
 
+    @Inject
+    private StopListCache cache;
+
+    @Override
     public void execute() throws MojoExecutionException {
         init();
         checkInDirectory(new File("."));
 
+        beforeClose();
         if (hasErrors) {
             throw new MojoExecutionException("Stop-words found in source!");
         }
     }
 
+    /**
+     * Runs in start of plugin work
+     */
     private void init() {
         initCanonicalPaths();
+        cache.setLogger(getLog());
+        cache.beforeStart();
     }
 
+    /**
+     * Runs before plugin finish work
+     */
+    private void beforeClose() {
+        cache.beforeClose();
+    }
+
+    /**
+     * Fill exclude canonical paths
+     */
     private void initCanonicalPaths() {
         for (String excludePath : excludes) {
             File file = new File(excludePath);
@@ -62,6 +107,11 @@ public class StopListMojo extends AbstractMojo {
         }
     }
 
+    /**
+     * Recursive search in directory and files
+     *
+     * @param directory where search to start
+     */
     private void checkInDirectory(File directory) {
         if (!directory.canRead()) {
             handleNoAccess(directory);
@@ -85,6 +135,11 @@ public class StopListMojo extends AbstractMojo {
         }
     }
 
+    /**
+     * Checks file for stop-words
+     *
+     * @param file to check
+     */
     private void checkFile(File file) {
         if (!file.canRead()) {
             handleNoAccess(file);
@@ -92,12 +147,16 @@ public class StopListMojo extends AbstractMojo {
         }
 
         checkFileName(file);
-
         if (!file.isDirectory()) {
             checkFileContent(file);
         }
     }
 
+    /**
+     * Check file name for stop-words
+     *
+     * @param file to check
+     */
     private void checkFileName(File file) {
         String fileName = file.getName();
         if (ignoreCase) {
@@ -117,7 +176,17 @@ public class StopListMojo extends AbstractMojo {
         }
     }
 
+    /**
+     * Check file content for stop-words
+     *
+     * @param file to check
+     */
     private void checkFileContent(File file) {
+        if (!cache.isFileChanged(file)) {
+            getLog().debug("file wasn't change " + file.getAbsolutePath());
+            return;
+        }
+
         try {
             Scanner scanner = new Scanner(file);
 
@@ -141,11 +210,19 @@ public class StopListMojo extends AbstractMojo {
                     }
                 }
             }
+
+            cache.addToCache(file);
         } catch (FileNotFoundException e) {
             getLog().error(String.format("File with path %s wasn't found", file.getPath()));
         }
     }
 
+    /**
+     * Checks is file should be excluded for checking
+     *
+     * @param file to check
+     * @return boolean result
+     */
     private boolean isFileExcluded(File file) {
         try {
             String canonicalFilePath = file.getCanonicalPath();
@@ -156,6 +233,11 @@ public class StopListMojo extends AbstractMojo {
         }
     }
 
+    /**
+     * Handle stop word detecting
+     *
+     * @param errorMsg - error message to work with
+     */
     private void handleStopWordDetected(String errorMsg) {
         if (errorLevel.equals("WARN")) {
             getLog().warn(errorMsg);
@@ -165,6 +247,11 @@ public class StopListMojo extends AbstractMojo {
         }
     }
 
+    /**
+     * Handle no-access file situation
+     *
+     * @param file with no-access
+     */
     private void handleNoAccess(File file) {
         getLog().warn("No access to read " + file.getAbsolutePath());
     }

@@ -13,13 +13,12 @@
     <build>
         <plugins>
             <plugin>
-                <artifactId>maven-my-plugin</artifactId>
+                <artifactId>stoplist-maven-plugin</artifactId>
                 <configuration>
-                    <test>TEST!</test>
-                    <exclude>
-                        <param>Eclude1</param>
-                        <param>Eclude2</param>
-                    </exclude>
+                    <excludes>
+                        <exclude>Eclude1</exclude>
+                        <exclude>Eclude2</exclude>
+                    </excludes>
                 </configuration>
             </plugin>
         </plugins>
